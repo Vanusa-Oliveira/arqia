@@ -30,8 +30,8 @@ numeração impressa no artigo.
 Requisitos: Python 3.10+ e uma chave da [Groq](https://console.groq.com) (há plano gratuito).
 
 ```bash
-git clone <url-do-repositorio>
-cd <pasta>
+git clone https://github.com/Vanusa-Oliveira/arqia.git
+cd arqia
 python -m venv venv
 venv\Scripts\activate        # Windows (cmd). No PowerShell: .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
