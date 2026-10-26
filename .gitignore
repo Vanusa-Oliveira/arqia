@@ -1,0 +1,19 @@
+# Segredos
+.env
+
+# Ambiente virtual e caches
+venv/
+__pycache__/
+*.pyc
+
+# Índice de busca: gerado automaticamente por rag/vectorstore.py a partir dos documentos
+rag/index.faiss
+rag/docs.json
+rag/index_meta.json
+
+# Artigos em PDF (material com direitos autorais: veja documentos/README.md)
+documentos/*.pdf
+
+# Ferramentas locais
+.claude/
+.vscode/
