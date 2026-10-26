@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+<!-- Herda o layout base (estrutura geral da página, CSS, etc.) -->
+{% block content %}
+<!-- Define o bloco de conteúdo que será inserido no base.html -->
+<div class="chat-container">
+    <!-- Container principal do chat -->
+    <div id="chatBox" class="chat-box">
+        <!-- Tela vazia: perguntas de exemplo (some quando há mensagens) -->
+        <div id="exemplos" class="exemplos">
+            <p class="exemplos-titulo">Experimente perguntar:</p>
+            <div class="exemplos-lista">
+                <button type="button" class="exemplo">O que é arquitetura de software?</button>
+                <button type="button" class="exemplo">Quais as vantagens e desvantagens dos microserviços?</button>
+                <button type="button" class="exemplo">O que é o modelo de visões 4+1?</button>
+                <button type="button" class="exemplo">O que são estilos arquiteturais segundo Garlan e Shaw?</button>
+            </div>
+        </div>
+    </div>
+    <!-- Área onde as mensagens (usuário e IA) serão exibidas -->
+    <div class="input-area">
+        <!-- Área de entrada do usuário -->
+        <textarea id="pergunta" placeholder="Digite sua pergunta..."></textarea>
+        <!-- Campo onde o usuário digita a pergunta -->
+        <button id="btnEnviar">Enviar</button>
+        <!-- Botão para enviar a pergunta (vira "Parar" enquanto a resposta é gerada) -->
+        <button id="btnLimpar" class="btn-limpar">Limpar Histórico</button>
+        <!-- Botão para apagar o histórico do chat -->
+    </div>
+</div>
+<!-- Bibliotecas para exibir markdown com segurança (versões fixas + verificação de integridade) -->
+<!-- marked: converte markdown em HTML | DOMPurify: remove qualquer HTML perigoso do resultado -->
+<script src="https://cdn.jsdelivr.net/npm/marked@18.0.13/lib/marked.umd.js"
+        integrity="sha384-Jy8qDMspJASzATgFngF2ompIKy0StbCcvuTE65mxDm/E0/YSIF6Ndc+5V7bbwRcw"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.15/dist/purify.min.js"
+        integrity="sha384-uUMu9JDY09vBzRf9SPcK2VgUj+W/70J6Soc+Dded5P474ElQ63iv9j5N3DE7Kp3N"
+        crossorigin="anonymous"></script>
+<script>
+// Aguarda o carregamento completo do HTML antes de executar o JS
+document.addEventListener("DOMContentLoaded", function () {
+    // ==============================
+    // REFERÊNCIAS DOS ELEMENTOS
+    // ==============================
+    // Campo de entrada
+    const input = document.getElementById("pergunta");
+    // Caixa onde ficam as mensagens
+    const chatBox = document.getElementById("chatBox");
+    // Botão enviar (vira "Parar" durante a geração)
+    const btnEnviar = document.getElementById("btnEnviar");
+    // Botão limpar histórico
+    const btnLimpar = document.getElementById("btnLimpar");
+    // Bloco com as perguntas de exemplo (tela vazia)
+    const exemplos = document.getElementById("exemplos");
+
+    // Estado da geração: permite parar a resposta no meio
+    let gerando = false;
+    let controlador = null;   // AbortController da requisição em andamento
+
+
+    // ==============================
+    // MARKDOWN (RESPOSTAS DA IA)
+    // ==============================
+    // O texto ORIGINAL (markdown) fica em el.dataset.raw. O que aparece na tela é
+    // o HTML gerado a partir dele, sempre passando pelo DOMPurify.
+    // Só o histórico e o localStorage usam o texto original, nunca o HTML.
+
+    const bibliotecasCarregadas = () => window.marked && window.DOMPurify;
+
+    if (window.DOMPurify) {
+        // Links abrem em nova aba, sem dar acesso à página do chat
+        DOMPurify.addHook("afterSanitizeAttributes", function (node) {
+            if (node.tagName === "A") {
+                node.setAttribute("target", "_blank");
+                node.setAttribute("rel", "noopener noreferrer");
+            }
+        });
+    }
+
+    // Cria uma mensagem da IA: [ .conteudo (texto) ] + [ .acoes (botão copiar) ]
+    function criarMsgIA() {
+        const el = document.createElement("div");
+        el.className = "msg ia";
+        const conteudo = document.createElement("div");
+        conteudo.className = "conteudo";
+        el.appendChild(conteudo);
+        return el;
+    }
+
+    function renderizar(el, texto) {
+        el.dataset.raw = texto;
+        const alvo = el.querySelector(".conteudo") || el;
+        if (bibliotecasCarregadas()) {
+            // Sem <img>: uma imagem com URL externa poderia vazar dados da conversa
+            alvo.innerHTML = DOMPurify.sanitize(marked.parse(texto, { breaks: true }), {
+                FORBID_TAGS: ["img", "style", "form", "input", "button", "iframe"],
+                FORBID_ATTR: ["style"]
+            });
+            el.classList.add("md");
+        } else {
+            // Bibliotecas não carregaram (sem internet, por exemplo): mostra como texto
+            el.classList.remove("md");
+            alvo.innerText = texto;
+        }
+    }
+
+    // Texto original de uma mensagem (markdown para a IA, texto puro para o usuário)
+    function textoDe(el) {
+        return el.dataset.raw !== undefined ? el.dataset.raw : el.innerText;
+    }
+
+
+    // ==============================
+    // BOTÃO COPIAR
+    // ==============================
+    // Copia o texto como aparece na tela (sem os símbolos do markdown)
+    async function copiarTexto(texto) {
+        try {
+            await navigator.clipboard.writeText(texto);
+            return true;
+        } catch (e) {
+            // Alternativa para navegadores/contextos sem a API de área de transferência
+            try {
+                const ta = document.createElement("textarea");
+                ta.value = texto;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand("copy");
+                document.body.removeChild(ta);
+                return ok;
+            } catch (e2) {
+                return false;
+            }
+        }
+    }
+
+    function adicionarAcoes(el) {
+        if (el.querySelector(".acoes")) return;
+
+        const acoes = document.createElement("div");
+        acoes.className = "acoes";
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-acao";
+        btn.textContent = "Copiar";
+        btn.addEventListener("click", async function () {
+            const conteudo = el.querySelector(".conteudo") || el;
+            const ok = await copiarTexto(conteudo.innerText.trim());
+            btn.textContent = ok ? "Copiado!" : "Não foi possível copiar";
+            setTimeout(() => { btn.textContent = "Copiar"; }, 1800);
+        });
+
+        acoes.appendChild(btn);
+        el.appendChild(acoes);
+    }
+
+
+    // ==============================
+    // TELA VAZIA (PERGUNTAS DE EXEMPLO)
+    // ==============================
+    function atualizarExemplos() {
+        exemplos.style.display = chatBox.querySelector(".msg") ? "none" : "";
+    }
+
+
+    // ==============================
+    // ESTADO DOS BOTÕES (ENVIAR / PARAR)
+    // ==============================
+    function definirGerando(valor) {
+        gerando = valor;
+        btnEnviar.textContent = valor ? "Parar" : "Enviar";
+        btnEnviar.classList.toggle("parar", valor);
+        // Não deixa limpar o histórico no meio de uma resposta
+        btnLimpar.disabled = valor;
+    }
+
+
+    // ==============================
+    // PERSISTÊNCIA (LOCALSTORAGE)
+    // ==============================
+    // Salva o chat no navegador.
+    // Guarda só o TEXTO de cada mensagem (nunca HTML): assim nada salvo
+    // no localStorage pode virar código executável quando for restaurado.
+    function salvarChat() {
+        try {
+            const mensagens = Array.from(chatBox.querySelectorAll(".msg")).map(el => ({
+                autor: el.classList.contains("user") ? "user" : "ia",
+                texto: textoDe(el)
+            }));
+            localStorage.setItem("chatHistorico", JSON.stringify(mensagens));
+        } catch (e) {
+            // localStorage indisponível ou cheio: o chat segue funcionando sem persistência
+        }
+    }
+    // Carrega o histórico salvo
+    function carregarChat() {
+        let mensagens;
+        try {
+            mensagens = JSON.parse(localStorage.getItem("chatHistorico"));
+        } catch (e) {
+            // Formato antigo (HTML) ou dado corrompido: descarta
+            try { localStorage.removeItem("chatHistorico"); } catch (e2) {}
+            return;
+        }
+        if (!Array.isArray(mensagens)) return;
+
+        for (const m of mensagens) {
+            if (!m || typeof m.texto !== "string") continue;
+            if (m.autor === "user") {
+                const div = document.createElement("div");
+                div.className = "msg user";
+                chatBox.appendChild(div);
+                // innerText: a pergunta do usuário é sempre texto, nunca HTML
+                div.innerText = m.texto;
+            } else {
+                const div = criarMsgIA();
+                chatBox.appendChild(div);
+                renderizar(div, m.texto);
+                adicionarAcoes(div);
+            }
+        }
+        // Scroll automático para o final
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    // Limpa o histórico
+    function limparChat() {
+        if (gerando) return;
+        // Remove do armazenamento
+        try { localStorage.removeItem("chatHistorico"); } catch (e) {}
+        // Limpa a interface (mantém o bloco de exemplos)
+        chatBox.querySelectorAll(".msg, .typing").forEach(el => el.remove());
+        atualizarExemplos();
+    }
+
+    // Carrega histórico automaticamente ao abrir a página
+    carregarChat();
+    atualizarExemplos();
+
+
+    // ==============================
+    // FUNÇÃO PRINCIPAL (ENVIO)
+    // ==============================
+
+    async function enviarPergunta() {
+
+        // Uma resposta por vez
+        if (gerando) return;
+
+        // Remove espaços extras
+        const pergunta = input.value.trim();
+
+        // Se estiver vazio, não faz nada
+        if (!pergunta) return;
+
+
+        // ==============================
+        // MONTA O HISTÓRICO (ANTES da nova pergunta)
+        // ==============================
+
+        // Lê as mensagens já exibidas (inclusive as restauradas do localStorage)
+        // e envia só as últimas 6 para o backend
+        const historico = Array.from(chatBox.querySelectorAll(".msg.user, .msg.ia"))
+            .map(el => ({
+                role: el.classList.contains("user") ? "user" : "assistant",
+                content: textoDe(el).trim()
+            }))
+            .filter(m => m.content)
+            .slice(-6);
+
+
+        // ==============================
+        // EXIBE MENSAGEM DO USUÁRIO
+        // ==============================
+
+        const userMsg = document.createElement("div");
+        userMsg.className = "msg user"; // classe CSS para estilizar
+        userMsg.innerText = pergunta;
+
+        chatBox.appendChild(userMsg);
+        atualizarExemplos();
+
+        // Salva no histórico
+        salvarChat();
+
+        // Limpa o campo de entrada
+        input.value = "";
+
+        // Scroll para o final
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+
+        // ==============================
+        // PEDE A RESPOSTA (botão vira "Parar" enquanto isso)
+        // ==============================
+        controlador = new AbortController();
+        definirGerando(true);
+        try {
+            await pedirResposta(pergunta, historico, controlador.signal);
+        } finally {
+            definirGerando(false);
+            controlador = null;
+            input.focus();
+        }
+    }
+
+
+    // ==============================
+    // REQUISIÇÃO E LEITURA DO STREAM
+    // ==============================
+
+    async function pedirResposta(pergunta, historico, signal) {
+
+        // ==============================
+        // INDICADOR "CONSULTANDO..."
+        // ==============================
+
+        const typingIndicator = document.createElement("div");
+        typingIndicator.className = "typing";
+
+        // Três pontos animados + texto explicando o que está acontecendo
+        typingIndicator.innerHTML = `
+            <span></span>
+            <span></span>
+            <span></span>
+            <em class="typing-texto">Consultando a base de conhecimento…</em>
+        `;
+
+        chatBox.appendChild(typingIndicator);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // Exibe uma mensagem de erro no chat no lugar da resposta da IA
+        function mostrarErro(texto) {
+            if (typingIndicator.parentNode) chatBox.removeChild(typingIndicator);
+            const erroMsg = criarMsgIA();
+            erroMsg.querySelector(".conteudo").innerText = texto;
+            erroMsg.dataset.raw = texto;
+            chatBox.appendChild(erroMsg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            salvarChat();
+        }
+
+
+        // ==============================
+        // REQUISIÇÃO PARA O BACKEND (/ask)
+        // ==============================
+
+        let response;
+        try {
+            response = await fetch("/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                signal: signal,
+
+                // Envia a pergunta em formato JSON
+                body: JSON.stringify({ question: pergunta, history: historico })
+            });
+        } catch (erro) {
+            if (erro.name === "AbortError") {
+                mostrarErro("Geração interrompida.");
+            } else {
+                // Servidor fora do ar, sem internet, etc.
+                mostrarErro("Não consegui conectar ao servidor. Verifique se o app está rodando e tente novamente.");
+            }
+            return;
+        }
+
+        // Erros do backend (400, 429, 500...) vêm como texto simples
+        if (!response.ok) {
+            const detalhe = (await response.text()).slice(0, 300);
+            // 400 (pergunta inválida) e 429 (limite de perguntas) trazem uma mensagem própria
+            mostrarErro((response.status === 400 || response.status === 429) && detalhe
+                ? detalhe
+                : "Erro no servidor (código " + response.status + "). Tente novamente.");
+            return;
+        }
+
+
+        // ==============================
+        // PREPARAÇÃO PARA STREAMING
+        // ==============================
+
+        // reader → lê a resposta em partes (stream)
+        const reader = response.body.getReader();
+
+        // decoder → converte bytes para texto
+        const decoder = new TextDecoder("utf-8");
+
+        let buffer = "";
+
+
+        // Remove o indicador "consultando..."
+        chatBox.removeChild(typingIndicator);
+
+
+        // ==============================
+        // CRIA MENSAGEM DA IA
+        // ==============================
+
+        const iaMsg = criarMsgIA();
+
+        chatBox.appendChild(iaMsg);
+
+
+        // ==============================
+        // LEITURA DO STREAM (RESPOSTA)
+        // ==============================
+
+        try {
+            while (true) {
+
+                // Lê um pedaço da resposta
+                const { done, value } = await reader.read();
+
+                // Se terminou, sai do loop
+                if (done) break;
+
+                // Converte bytes em texto e acumula no buffer
+                buffer += decoder.decode(value, { stream: true });
+
+                // Atualiza o conteúdo da mensagem da IA
+                renderizar(iaMsg, buffer);
+
+                // Mantém scroll no final
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        } catch (erro) {
+            if (erro.name === "AbortError") {
+                // O usuário clicou em "Parar": mantém o que já chegou
+                renderizar(iaMsg, buffer + "\n\n*[Geração interrompida]*");
+            } else {
+                // Conexão caiu no meio da resposta: mantém o que já chegou
+                renderizar(iaMsg, buffer + "\n\n[Conexão interrompida durante a resposta.]");
+            }
+        }
+
+        // Resposta pronta: agora o botão "Copiar" pode aparecer
+        adicionarAcoes(iaMsg);
+
+
+        // ==============================
+        // SALVA HISTÓRICO
+        // ==============================
+
+        salvarChat();
+    }
+
+
+    // ==============================
+    // EVENTOS
+    // ==============================
+
+    // Clique no botão "Enviar" (ou "Parar", se estiver gerando)
+    btnEnviar.addEventListener("click", function () {
+        if (gerando && controlador) {
+            controlador.abort();
+        } else {
+            enviarPergunta();
+        }
+    });
+
+    // Clique no botão "Limpar"
+    btnLimpar.addEventListener("click", limparChat);
+
+    // Clique em uma pergunta de exemplo
+    exemplos.querySelectorAll(".exemplo").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            if (gerando) return;
+            input.value = btn.textContent;
+            enviarPergunta();
+        });
+    });
+
+
+    // Enviar com Enter (sem Shift)
+    input.addEventListener("keydown", function (e) {
+
+        // Enter sem Shift envia
+        if (e.key === "Enter" && !e.shiftKey) {
+
+            e.preventDefault(); // impede quebra de linha
+
+            enviarPergunta();
+        }
+    });
+});
+</script>
+{% endblock %}

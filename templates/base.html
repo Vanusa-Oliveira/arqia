@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <!-- Define codificação UTF-8 (acentos, caracteres especiais, etc.) -->
+    <title>ArqueIA</title>
+    <!-- Título da aba do navegador -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Importa o arquivo CSS da pasta static do Flask -->
+</head>
+<body>
+<header>
+    <!-- Cabeçalho da aplicação -->
+    <div class="header-container">
+        <!-- Container para organizar os elementos do header -->
+        <h1>ArqueIA</h1>
+        <!-- Nome do sistema (marca do projeto) -->
+        <p>
+            Assistente Inteligente para Arquitetura de Software.
+        </p>
+        <!-- Subtítulo explicando o propósito do sistema -->
+        <nav>
+            <!-- Menu de navegação -->
+            <a href="{{ url_for('home') }}">Consulta IA</a>
+            <!-- Link para a página principal (chat com IA) -->
+            <a href="{{ url_for('institucional') }}">Quem Somos</a>
+            <!-- Link para a página institucional -->
+        </nav>
+    </div>
+</header>
+
+
+<main>
+    <!-- Área principal da página -->
+    {% block content %}{% endblock %}
+    <!-- Aqui será inserido o conteúdo das outras páginas (index, institucional, etc.) -->
+</main>
+<footer>
+    <!-- Rodapé da aplicação  alt+0169 -->
+    © 2026 ArqueIA | Plataforma de Apoio à Arquitetura de Software com IA
+    <!-- Texto institucional adaptado para o contexto de arquitetura de software -->
+</footer>
+</body>
+</html>

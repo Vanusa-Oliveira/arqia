@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+<!-- Herda o layout principal (menu, cabeçalho, estilos globais, etc.) -->
+{% block content %}
+<!-- Início do bloco de conteúdo que será inserido dentro do template base -->
+<div class="institucional-container">
+    <!-- Container principal da página institucional -->
+    <h2>Quem Somos</h2>
+    <!-- Título da seção -->
+    <p>
+        O <strong>ArqueIA</strong> é um assistente virtual para apoiar estudantes, desenvolvedores e
+        arquitetos de software em dúvidas sobre arquitetura de software. É um trabalho acadêmico.
+    </p>
+    <p>
+        Ele responde com base em uma coleção de documentos de referência: artigos clássicos da área
+        (Garlan e Shaw, Kruchten, Perry e Wolf, Jansen e Bosch) e um texto introdutório em português sobre
+        estilos arquiteturais. Para cada pergunta, o assistente procura os trechos mais relevantes
+        nesses documentos, entregando-os ao modelo de linguagem para que ele escreva a resposta.
+    </p>
+    <p>
+        As respostas indicam o documento e a página dos trechos usados. Quando a informação não está
+        na base, o assistente diz isso em vez de inventar uma resposta.
+    </p>
+    <p>
+        <strong>Atenção:</strong> assim como qualquer assistente baseado em modelo de linguagem, o
+        ArqueIA pode errar ou acrescentar algo que não está nos documentos. Confira sempre as fontes
+        indicadas antes de usar uma resposta em uma decisão de projeto.
+    </p>
+</div>
+{% endblock %}
+<!-- Fim do bloco de conteúdo -->
