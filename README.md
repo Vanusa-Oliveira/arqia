@@ -67,3 +67,13 @@ documentos/             PDFs de referência (não versionados)
 ## Referências
 
 Veja [`documentos/README.md`](documentos/README.md).
+
+## Licença
+
+**Todos os direitos reservados.** Este repositório é público para visualização e avaliação
+(portfólio). É permitido ler o código e executá-lo localmente para avaliação pessoal, sem fins
+comerciais. **Não é permitido** copiar, reutilizar, modificar ou distribuir o código, a estrutura ou a
+documentação sem autorização por escrito da autora. Detalhes em [LICENSE](LICENSE).
+
+Os artigos listados em `documentos/README.md` pertencem aos seus autores e não estão incluídos
+neste repositório.
